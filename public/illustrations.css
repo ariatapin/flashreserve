@@ -1,0 +1,69 @@
+.product-illustration {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: min(82%, 260px);
+  height: 150px;
+  filter: drop-shadow(0 13px 10px rgb(45 49 37 / 15%));
+  transition: transform 180ms ease;
+}
+
+.product-card:hover .product-illustration {
+  transform: translateY(-3px) scale(1.025);
+}
+
+.product-illustration svg {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  overflow: visible;
+}
+
+.art-headphones .product-illustration {
+  width: min(88%, 270px);
+}
+
+.art-keyboard .product-illustration {
+  width: min(90%, 280px);
+}
+
+.art-powerbank .product-illustration {
+  height: 160px;
+}
+
+.product-price {
+  margin-top: -5px;
+  color: #687651;
+  font-family: Manrope, sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -.2px;
+}
+
+.notice-action {
+  display: inline-block;
+  margin: 9px 7px 0 0;
+  padding: 8px 10px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 600 10px 'DM Sans', sans-serif;
+  cursor: pointer;
+}
+
+.notice-action:hover {
+  background: rgb(255 255 255 / 45%);
+}
+
+@media (max-width: 760px) {
+  .product-illustration {
+    height: 125px;
+  }
+}
+
+@media (max-width: 440px) {
+  .product-illustration {
+    height: 150px;
+  }
+}

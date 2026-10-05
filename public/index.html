@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f7f4" />
+    <title>FlashReserve — Flash sale, stok terbatas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/illustrations.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="FlashReserve beranda">
+        <span class="brand-mark">F</span><span>flash<span class="brand-light">reserve</span></span>
+      </a>
+      <div class="live-indicator"><span></span> FLASH SALE LIVE</div>
+      <a class="top-link" href="#products">Lihat produk <span aria-hidden="true">↗</span></a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span class="spark">✳</span> DROP TERBATAS · HARI INI</div>
+          <h1>Yang cepat,<br />dapat <span>lebih dulu.</span></h1>
+          <p>Amankan barang incaranmu sebelum kehabisan. Stok diperbarui langsung, reservasi berlaku selama 15 menit.</p>
+          <a class="primary-link" href="#products">Jelajahi drop <span>↓</span></a>
+          <div class="hero-proof"><div class="proof-avatars"><i>R</i><i>A</i><i>M</i></div><span>Checkout cepat. Stok terjaga.</span></div>
+        </div>
+        <div class="hero-art" aria-label="Ilustrasi paket FlashReserve">
+          <div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div>
+          <div class="art-sun"></div>
+          <div class="art-box"><div class="box-top"></div><div class="box-front"><span>FR</span><small>LIMITED<br />DROP</small></div><div class="box-side"></div></div>
+          <div class="art-sticker">⚡<span>15 MIN<br />HOLD</span></div>
+          <div class="art-caption"><span class="caption-dot"></span> STOCK IS MOVING</div>
+          <span class="float-star star-a">✳</span><span class="float-star star-b">✦</span>
+        </div>
+      </section>
+
+      <section class="ticker" aria-label="Keunggulan FlashReserve">
+        <span>REAL-TIME INVENTORY</span><b>✳</b><span>SECURE 15-MINUTE HOLD</span><b>✳</b><span>NO OVERSELLING</span><b>✳</b><span>REAL-TIME INVENTORY</span>
+      </section>
+
+      <section class="products-section" id="products">
+        <div class="section-head">
+          <div><div class="eyebrow muted"><span class="live-dot"></span> SEDANG BERLANGSUNG</div><h2>Drop pilihan<span>.</span></h2></div>
+          <button class="refresh-button" id="refresh" type="button"><span>↻</span> Refresh stok</button>
+        </div>
+        <div id="notice" class="notice" role="status" aria-live="polite"></div>
+        <div id="product-grid" class="product-grid" aria-live="polite">
+          <div class="loading-card"><span class="loader"></span> Memuat drop terbaru…</div>
+        </div>
+        <p class="section-footnote"><span>⌁</span> Setiap reservasi mengunci stok selama 15 menit agar checkout tetap adil.</p>
+      </section>
+    </main>
+
+    <footer><a class="brand footer-brand" href="/"><span class="brand-mark">F</span><span>flash<span class="brand-light">reserve</span></span></a><span>Fast checkout. Fair chances.</span><span class="footer-copy">© 2026 FlashReserve</span></footer>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
