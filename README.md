@@ -1,35 +1,57 @@
 # FlashReserve
 
-FlashReserve is a portfolio project for a high-concurrency flash-sale inventory reservation service. It demonstrates PostgreSQL-backed stock allocation, transactional reservation creation, expiry handling, and integration testing under concurrent requests.
+FlashReserve is a Node.js + TypeScript demo for handling flash-sale inventory reservations with strong consistency guarantees under concurrency.
 
-The project includes a small browser UI for inspecting demo products and exercising reservation and checkout outcomes. Payment is simulated; no payment provider is contacted.
+It demonstrates how to reserve stock safely in PostgreSQL, prevent overselling during high contention, expire pending reservations, and restore inventory when payment or checkout fails.
 
-## Engineering goals
+## Why this project exists
 
-- Prevent inventory from becoming negative when requests compete for the final unit.
-- Persist stock changes and reservation records atomically.
-- Restore stock exactly once after a failed demo checkout or an expired hold.
-- Exercise the critical transaction path against PostgreSQL, rather than mocking the database.
-- Keep the database as the source of truth for inventory. Redis is not required for the correctness guarantees implemented here.
+This project is designed to model a real flash-sale flow without introducing mock-only logic. The main focus is on:
+
+- preventing negative inventory under concurrent requests
+- making reservation writes atomic with PostgreSQL transactions
+- restoring stock when a reservation expires or checkout fails
+- validating the critical path with integration tests against a real database
+
+## Features
+
+- Inventory reservation API with stock validation
+- Conditional SQL update to prevent overselling
+- 15-minute reservation expiry sweep
+- Simulated invoice/payment flow for demo checkout outcomes
+- Browser UI to try the flow without external payment providers
+- PostgreSQL-backed persistence with Drizzle ORM
+- Vitest integration tests for race conditions and rollback scenarios
+
+## Tech stack
+
+- Node.js 22
+- TypeScript
+- Express
+- PostgreSQL
+- Drizzle ORM
+- Vitest
+- ESLint
+- GitHub Actions
 
 ## Architecture
 
 ```mermaid
 flowchart LR
     Browser[Browser UI] -->|HTTP / JSON| API[Express API]
-    API --> Service[Reservation service]
+    API --> Service[Reservation Service]
     Service --> ORM[Drizzle ORM]
     ORM --> PG[(PostgreSQL)]
     API --> Static[Static assets]
     Static --> Browser
-    CI[GitHub Actions] -->|PostgreSQL service| PG
+    CI[GitHub Actions] --> PG
 ```
 
-The browser UI is served by Express. The API uses Drizzle ORM with the PostgreSQL driver. Reservation state and inventory mutations are stored in PostgreSQL; the browser never updates stock directly.
+The browser UI is served by the same Express app that exposes the API. Product and reservation state live in PostgreSQL, while the app logic is implemented in TypeScript.
 
-## Reservation consistency model
+## Core consistency model
 
-The reservation service uses a conditional SQL update as its concurrency control point:
+The core inventory protection is a conditional update:
 
 ```sql
 UPDATE products
@@ -38,122 +60,169 @@ WHERE id = $product_id AND stock >= $quantity
 RETURNING id;
 ```
 
-PostgreSQL serializes conflicting updates to the same product row. A request that cannot decrement stock receives no returned row and is rejected as sold out. The decrement, reservation insert, and demo invoice issuance run in one Drizzle transaction. If invoice issuance throws, PostgreSQL rolls back both database writes.
+This is the critical concurrency control point. If two requests compete for the last item, only one update succeeds. The losing request is rejected as sold out. The inventory decrement, reservation insert, and invoice simulation happen in one database transaction, so failed invoice processing rolls back the entire operation.
 
-Each successful hold is created with a 15-minute expiry. A background sweep runs at startup and every 15 seconds. It changes expired `pending` reservations to `expired` and restores their quantities in the same transaction. Demo checkout locks the reservation row with `SELECT ... FOR UPDATE` before changing its status. Failed checkout restores inventory in that transaction; repeated callbacks see a terminal status and do not restore stock a second time.
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant A as Express API
-    participant D as PostgreSQL
-    C->>A: POST /api/reservations
-    A->>D: BEGIN
-    A->>D: Conditional stock decrement
-    alt stock available
-        A->>D: Insert pending hold (expires in 15m)
-        A->>D: Issue simulated invoice
-        A->>D: COMMIT
-        A-->>C: 201 holdingId + expiresAt
-    else no stock or invoice error
-        A->>D: ROLLBACK
-        A-->>C: 409 sold out / 502 invoice failure
-    end
-```
+Expired reservations are automatically released by a background sweep and their stock is restored in the same transaction. Failed checkout also restores inventory exactly once.
 
 ## API
 
-All endpoints are served by the same Express process as the static UI.
+### Get products
 
-| Method | Endpoint | Request | Result |
-|---|---|---|---|
-| `GET` | `/api/products` | None | Product ID, SKU, title, IDR price, and current stock. |
-| `POST` | `/api/reservations` | `{ "productId": "<uuid>", "quantity": 1 }` | `201` with `holdingId`, `expiresAt`, and a simulated `invoiceId`; `409` when stock is insufficient. |
-| `POST` | `/api/reservations/:holdingId/checkout` | `{ "outcome": "paid" }` or `{ "outcome": "failed" }` | Sets the demo reservation status. Failed checkout restores stock. |
+```http
+GET /api/products
+```
 
-Invalid reservation input returns `400`. An invoice adapter error returns `502` after the database transaction rolls back. Unknown holding IDs return `404`.
+Returns catalog data including product ID, SKU, title, price in IDR, and stock.
 
-## Data model
+### Create reservation
 
-| Table | Relevant columns | Purpose |
-|---|---|---|
-| `products` | `id`, `sku`, `title`, `price_idr`, `stock` | Product catalog and the authoritative inventory count. `stock` has a non-negative constraint. |
-| `reservations` | `id`, `product_id`, `quantity`, `expires_at`, `invoice_id`, `status` | Hold records. Status values are `pending`, `paid`, `failed`, or `expired`. |
-| `flashreserve_migrations` | `name`, `applied_at` | Applied SQL migration files. A PostgreSQL advisory transaction lock serializes migration runs. |
+```http
+POST /api/reservations
+Content-Type: application/json
 
-Schema definitions live in `src/db/schema.ts`; ordered SQL migrations live in `migrations/`.
+{
+  "productId": "<uuid>",
+  "quantity": 1
+}
+```
 
-## Tech stack
+Response:
 
-- TypeScript and Node.js 22
-- Express 5
-- PostgreSQL 16 and Drizzle ORM
-- Vitest and Supertest
-- ESLint and TypeScript compiler checks
-- GitHub Actions with an ephemeral PostgreSQL service container
+- `201 Created` when stock is available
+- `409 Conflict` when stock is insufficient
+- `400 Bad Request` for invalid input
 
-## Run locally
+Returns a reservation ID and expiry timestamp.
 
-Prerequisites: Node.js 22, npm, and a reachable PostgreSQL database. The database itself must exist before migrations run.
+### Checkout reservation
 
-1. Copy `.env.example` to `.env`.
-2. Set either `DATABASE_URL`, or the `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, and `DB_PASSWORD` values for your PostgreSQL server. For hosted databases, set `DB_SSLMODE` if your provider requires a specific mode. Keep `.env` private; it is git-ignored.
-3. Install dependencies, migrate the database, add demo products, and start the app:
+```http
+POST /api/reservations/:holdingId/checkout
+Content-Type: application/json
 
-```sh
+{
+  "outcome": "paid"
+}
+```
+
+Supported outcomes:
+
+- `paid`
+- `failed`
+
+If the outcome is `failed`, the reserved stock is restored. Repeated checkout attempts for terminal states do not double-restore inventory.
+
+## Local development
+
+### Prerequisites
+
+- Node.js 22+
+- npm
+- PostgreSQL database available locally or remotely
+
+### 1. Install dependencies
+
+```bash
 npm ci
+```
+
+### 2. Configure environment
+
+Copy the example environment file and update it with your PostgreSQL settings:
+
+```bash
+cp .env.example .env
+```
+
+Then adjust values such as:
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=localhost
+DB_PORT=5432
+DB_DATABASE=flashreserve
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+PORT=3000
+```
+
+### 3. Run database migrations and seed
+
+```bash
 npm run db:migrate
 npm run db:seed
+```
+
+### 4. Start the app
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The seed command inserts three demo products and updates their titles/prices on later runs while preserving existing stock values.
+Open `http://localhost:3000` in the browser.
 
-## Integration tests
+## Scripts
 
-Tests run against a real PostgreSQL database configured by `DATABASE_URL` or the `DB_*` variables in `.env`. Apply migrations before running them:
+```bash
+npm run dev         # start the app in watch mode
+npm run start       # start the app normally
+npm run lint        # run ESLint
+npm run typecheck   # run TypeScript checks
+npm run db:migrate  # apply migrations
+npm run db:seed     # add demo products
+npm test            # run tests
+```
 
-```sh
+## Testing
+
+The project uses real PostgreSQL-backed integration tests, not mocked database calls.
+
+```bash
 npm run db:migrate
 npm test -- --run
 ```
 
-The integration suite covers:
+The test suite covers:
 
-| Scenario | Assertion |
-|---|---|
-| Happy path | A hold ID is returned, stock is decremented, and expiry is approximately 15 minutes later. |
-| Last-unit race | Ten simultaneous requests for one unit produce one `201`, nine `409` responses, and exactly one reservation. |
-| Invoice issuance failure | The transaction leaves stock unchanged and creates no reservation. |
-| Failed demo checkout | Stock is restored once, including when the callback is repeated. |
-| Expiry sweep | Expired pending holds are marked and inventory is restored once. |
+- happy-path reservation flow
+- last-unit race condition handling
+- invoice failure rollback
+- failed checkout restoration
+- expiry sweep logic
 
-Fixtures use unique product SKUs and are deleted after the suite. The HTTP handler uses its own pooled database connections, so an outer test-owned transaction cannot contain its writes; cleanup is scoped to those fixture IDs. Each business operation itself uses a database transaction.
+## Project structure
 
-Run static checks with:
-
-```sh
-npm run lint
-npm run typecheck
+```text
+.
+├── src/
+│   ├── app.ts
+│   ├── server.ts
+│   ├── db/
+│   └── reservations/
+├── migrations/
+├── scripts/
+├── public/
+├── tests/
+├── .env.example
+├── package.json
+├── tsconfig.json
+├── vitest.config.ts
+├── eslint.config.js
+├── README.md
+└── .gitignore
 ```
 
-## Continuous integration
+## CI
 
-`.github/workflows/ci.yml` runs for pull requests targeting `main`. It uses `actions/setup-node` npm caching, starts PostgreSQL 16 as a runner service, runs ESLint and `tsc --noEmit`, applies migrations, then runs the automated test suite. CI dependency installation uses `npm ci` and the committed `package-lock.json` for reproducible installs.
+The repository includes a GitHub Actions workflow that runs linting, TypeScript checks, migrations, and tests with PostgreSQL in CI.
 
-## Screenshots and diagrams
+## Notes and limitations
 
-The architecture and transaction sequence above are Mermaid diagrams rendered by GitHub. To attach browser screenshots, add image files under `docs/images/` and enable/adapt the Markdown examples below. Capture the storefront and a successful/failed demo checkout; avoid including database credentials or other secrets in screenshots.
+- Payment handling is simulated for the demo; no real payment gateway is contacted.
+- The checkout endpoint is intentionally unauthenticated because this is a portfolio/demo project.
+- The expiry sweep runs in the application process and is safe to retry.
+- This implementation intentionally uses PostgreSQL as the source of truth for inventory, without Redis.
 
-<!--
-![FlashReserve storefront](docs/images/storefront.png)
-![Demo checkout result](docs/images/demo-checkout.png)
--->
+## License
 
-## Scope and limitations
-
-- Payment and invoice issuance are simulated. The generated invoice ID is a local placeholder; no external payment gateway is contacted.
-- The demo checkout endpoint is intentionally unauthenticated so reviewers can exercise both outcomes. Do not expose it as a production payment API.
-- Invoice issuance runs inside the reservation transaction for this deterministic demo. A real remote gateway has external side effects and needs an idempotent outbox/saga or compensation design before production use.
-- The expiry sweep runs in the application process. Its database state transition is safe to retry; production deployments with stronger scheduling/operational needs can move it to a dedicated worker.
-- Redis is not used. PostgreSQL row updates provide the stock correctness boundary in this implementation.
+This project is intended for learning, demo, and portfolio use.
