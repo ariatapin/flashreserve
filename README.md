@@ -4,6 +4,8 @@ FlashReserve is a Node.js + TypeScript demo for handling flash-sale inventory re
 
 It demonstrates how to reserve stock safely in PostgreSQL, prevent overselling during high contention, expire pending reservations, and restore inventory when payment or checkout fails.
 
+<img width="1888" height="999" alt="image" src="https://github.com/user-attachments/assets/1388b192-99b5-41cd-990c-d347fe74600e" />
+
 ## Why this project exists
 
 This project is designed to model a real flash-sale flow without introducing mock-only logic. The main focus is on:
